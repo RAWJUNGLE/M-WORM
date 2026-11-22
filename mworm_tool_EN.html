@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M-WORM · FLASH / DATA</title>
+<style>
+:root{--bg:#12151a;--panel:#1b2027;--line:#303842;--fg:#d8dee6;--dim:#8792a0;--acc:#ffb454;
+  --ok:#7ddc8a;--er:#ff7676;--ac:#ffb454}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:18px 16px 30px}
+main,section{max-width:900px;margin:0 auto}
+header{max-width:900px;margin:0 auto 16px;display:flex;align-items:center;gap:18px;border-bottom:1px solid var(--line);padding-bottom:12px}
+h1{margin:0;font-size:17px;color:var(--acc)}
+.tabs{display:flex;gap:6px;margin-left:auto}
+.tabbtn{background:#2a323d;color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:7px 18px;cursor:pointer;font:600 12px/1 inherit;letter-spacing:.07em}
+.tabbtn.on{background:var(--acc);border-color:var(--acc);color:#15191f}
+.tab[hidden]{display:none}
+.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.card h2,.panel h2{margin:0 0 10px;font-size:12px;color:var(--acc);text-transform:uppercase;letter-spacing:.07em}
+.row,.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+button,label.btn{background:#2a323d;color:var(--fg);border:1px solid #414c59;border-radius:6px;padding:8px 13px;cursor:pointer;font:inherit}
+button:hover,label.btn:hover{border-color:var(--acc);color:var(--acc)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--acc);border-color:var(--acc);color:#15191f;font-weight:600}
+input[type=text]{font:inherit;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:#15191f;color:var(--fg);width:160px}
+input[type=file]{display:none}
+#drop,#ddrop{border:2px dashed var(--line);border-radius:10px;padding:20px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
+#drop:hover,#drop.on,#ddrop:hover,#ddrop.over{border-color:var(--acc);color:var(--acc);background:#1d2229}
+#bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:12px}
+#bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+#log{font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:240px;overflow:auto;margin:0}
+.ok{color:var(--ok)}.er{color:var(--er)}.mut,.hint{color:var(--dim)}
+label{color:var(--dim);font-size:12px}
+#pkg,#dev{margin-top:10px}
+#stage{margin-top:6px}
+#dmsg{min-height:18px;color:var(--ok)}
+#banks{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.bank .name{font-weight:600;margin-bottom:4px;word-break:break-all}
+.bank .meta{color:var(--dim);font-size:11px;margin-bottom:8px}
+.slots{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.slot{padding:6px 0;border:1px solid var(--line);border-radius:5px;background:#222831;color:var(--dim);text-align:center;cursor:pointer;font:11px monospace}
+.slot.used{color:var(--fg);border-color:#4a5563}
+.slot.sel{background:var(--acc);color:#15191f;border-color:var(--acc);font-weight:700}
+.slot:hover{border-color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <h1>M-WORM</h1>
+  <div class="tabs">
+    <button class="tabbtn on" data-tab="flashTab">FLASH</button>
+    <button class="tabbtn" data-tab="dataTab">DATA</button>
+  </div>
+</header>
+
+<main>
+<section id="flashTab" class="tab">
+<div class="card">
+  <div id="drop">Drop <b>m-worm.fwsc</b> here or click to choose</div>
+  <input id="file" type="file" accept=".fwsc" hidden>
+  <div id="pkg" class="mut" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <button id="bInfo">Find FM-1</button>
+    <button id="bFlash" class="pri" disabled>Flash</button>
+    <label>port: <input id="port" type="text" placeholder="part of name"></label>
+  </div>
+  <div id="dev" class="mut" style="margin-top:10px">Device not checked.</div>
+  <div id="bar"><i></i></div>
+  <div id="stage" class="mut" style="margin-top:6px"></div>
+</div>
+
+<div class="card"><pre id="log"></pre></div>
+<p class="mut" style="font-size:13px">Requires Chrome or Edge, a data cable plugged directly into the port (no hub), and DAW / M-Upgrade closed. Do not disconnect FM-1 or close the tab while writing.</p>
+</section>
+
+<section id="dataTab" class="tab" hidden>
+<div id="ddrop">Drop BANK_*.WPB here (or .pat to paste) — or click to choose files</div>
+<input id="dfiles" type="file" multiple accept=".wpb,.pat">
+<div id="dmsg"></div>
+
+<main>
+  <section class="panel">
+    <h2>Banks</h2>
+    <div id="dbanks"><div class="hint">No files loaded yet</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Pattern</h2>
+    <div class="bar">
+      <button id="dbExtract" class="primary" disabled>Download .pat</button>
+      <label class="btn" id="dbImportLbl">Paste .pat into slot<input id="dpatFile" type="file" accept=".pat"></label>
+      <button id="dbAll" disabled>Extract all</button>
+      <button id="dbBank" disabled>Download bank</button>
+      <button id="dbClose">Clear</button>
+    </div>
+  </section>
+
+</section>
+</main>
+
+<script>
+/* ============ protocol (port of mworm_flash.py) ============ */
+const HS_QUERY = [0xF0,0x00,0x32,0x45,0x00,0x00,0x00,0x40,0x7F,0xF7];
+const UPGRADE  = [0xF0,0x22,0x24,0x35,0x7F,0xF7];
+const FINISH_CHECK = 0xE0000000, FINISH_WRITE = 0xF0000000;
+const BLOCKS = 20, BLK = 0x30, KEEP = 0x2F, MAXDATA = 512;
+const LOADER_MARK = "FELUCCA-LOADER-1";
+const PORT_RE = /fm-1|felucca|hortator|mnm|ota|composite|sinco|usb-midi/i;
+const DELAY = {open:300,start:2000,reply:10,loader:3000,reboot:3000,retry:1000,poll:1000,hs:1000,
+  idle_check:8000,idle_write:180000,wait_loader:30000,wait_reboot:40000};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function pack7(data){const out=[];let acc=0,nb=0;
+  for(const b of data){acc|=(b&0xFF)<<nb;nb+=8;while(nb>=7){out.push(acc&0x7F);acc>>>=7;nb-=7;}}
+  if(nb)out.push(acc&0x7F);return out;}
+function unpack7(data){const out=[];let acc=0,nb=0;
+  for(const b of data){acc|=(b&0x7F)<<nb;nb+=7;while(nb>=8){out.push(acc&0xFF);acc>>>=8;nb-=8;}}
+  return out;}
+
+function productOf(raw){
+  if(raw.length<BLOCKS*BLK)return null;let s="";
+  for(let i=0;i<BLOCKS;i++){const b=raw[i*BLK+KEEP];if(b!==0x7D)s+=String.fromCharCode((b-i-1)&0xFF);}
+  return s;}
+function logicalImage(raw){
+  const parts=[];for(let i=0;i<BLOCKS;i++)parts.push(raw.subarray(i*BLK,i*BLK+KEEP));
+  parts.push(raw.subarray(BLOCKS*BLK));
+  let n=0;for(const p of parts)n+=p.length;const out=new Uint8Array(n);let o=0;
+  for(const p of parts){out.set(p,o);o+=p.length;}return out;}
+function hasMark(raw){const m=[...LOADER_MARK].map(c=>c.charCodeAt(0));
+  outer:for(let i=0;i+m.length<=raw.length;i++){for(let j=0;j<m.length;j++)if(raw[i+j]!==m[j])continue outer;return true;}
+  return false;}
+
+function response(addr,data,fl=0){
+  const n=data.length,body=[0x00,0x59,0x30,(n+8)&0xFF,((n+8)>>8)&0xFF,0,fl,
+    addr&0xFF,(addr>>>8)&0xFF,(addr>>>16)&0xFF,(addr>>>24)&0xFF,n&0xFF,(n>>8)&0xFF,0,...data];
+  let sum=0;for(let i=6;i<body.length;i++)sum+=body[i];body.push(~sum&0xFF);
+  return Uint8Array.from([0xF0,...pack7(body),0xF7]);}
+function parseRequest(pkt){
+  if(pkt.length<2||pkt[0]!==0xF0||pkt[pkt.length-1]!==0xF7)return null;
+  const u=unpack7(pkt.slice(1,-1));
+  if(u.length!==15||u[0]!==0||u[1]!==0x59||u[2]!==0x30)return null;
+  let s=0;for(let i=6;i<14;i++)s+=u[i];if((~s&0xFF)!==u[14])return null;
+  return {fl:u[6],addr:(u[7]|u[8]<<8|u[9]<<16|u[10]<<24)>>>0,n:u[11]|u[12]<<8|u[13]<<16};}
+function parseIdentity(pkt){
+  if(pkt.length<2||pkt[0]!==0xF0||pkt[pkt.length-1]!==0xF7)return null;
+  const d=unpack7(pkt.slice(1,-1));
+  if(d.length!==34||d[0]!==0||d[1]!==0x59||d[2]!==0x11)return null;
+  let t=d.slice(6,33);while(t.length&&t[t.length-1]===0)t.pop();
+  const text=String.fromCharCode(...t),m=/^([^_]+)_(\d+)$/.exec(text);
+  return m?{text,model:m[1],version:+m[2],loader:m[1].toLowerCase().startsWith("ota-")}:null;}
+const modelOf=t=>t.split("_")[0].replace(/^ota-/i,"");
+
+/* ============ MIDI ============ */
+let access=null;
+class Link{
+  constructor(inp,out){this.inp=inp;this.out=out;this.q=[];this.w=null;this.buf=null;
+    inp.onmidimessage=e=>this.rx(e.data);}
+  static async open(inp,out){await inp.open();await out.open();const l=new Link(inp,out);await sleep(DELAY.open);return l;}
+  rx(d){
+    if(d[0]===0xF0)this.buf=[];else if(!this.buf)return;
+    for(const b of d)this.buf.push(b);
+    if(d[d.length-1]===0xF7){const p=Uint8Array.from(this.buf);this.buf=null;
+      if(this.w){const w=this.w;this.w=null;w(p);}else this.q.push(p);}}
+  get lost(){return ![...access.inputs.values()].some(i=>i.id===this.inp.id&&i.state==="connected");}
+  send(pkt){try{this.out.send(pkt);return true;}catch(e){return false;}}
+  read(ms){if(this.q.length)return Promise.resolve(this.q.shift());
+    return new Promise(res=>{const t=setTimeout(()=>{this.w=null;res(null);},Math.max(ms,0));
+      this.w=p=>{clearTimeout(t);res(p);};});}
+  drain(){this.q.length=0;}
+  async close(){this.inp.onmidimessage=null;try{await this.inp.close();}catch(e){}try{await this.out.close();}catch(e){}}
+}
+const baseName=n=>n.replace(/\s+\d+$/,"");
+function pairOutput(inp){
+  const outs=[...access.outputs.values()].filter(o=>o.state==="connected");
+  let o=outs.find(x=>x.name===inp.name);if(o)return o;
+  const same=outs.filter(x=>baseName(x.name)===baseName(inp.name));
+  if(same.length===1)return same[0];
+  return outs.length===1?outs[0]:null;}
+
+async function handshake(link,tries=3){
+  link.drain();
+  for(let t=0;t<tries;t++){
+    if(!link.send(Uint8Array.from(HS_QUERY)))return null;
+    const end=performance.now()+DELAY.hs;
+    while(performance.now()<end){const p=await link.read(end-performance.now());if(!p)break;
+      const id=parseIdentity(p);if(id)return id;}}
+  return null;}
+
+/* ============ updater ============ */
+class Updater{
+  constructor(port,ui){this.port=(port||"").toLowerCase();this.ui=ui;}
+  candidates(){const ins=[...access.inputs.values()].filter(i=>i.state==="connected");
+    return this.port?ins.filter(i=>i.name.toLowerCase().includes(this.port)):ins.filter(i=>PORT_RE.test(i.name));}
+  async find(want){
+    for(const inp of this.candidates()){
+      const out=pairOutput(inp);if(!out)continue;
+      let link;try{link=await Link.open(inp,out);}catch(e){this.ui.log(`  port ${inp.name}: could not open (${e.message||e})`,"mut");continue;}
+      const id=await handshake(link,2);
+      if(id&&(!want||want(id)))return {link,id,name:inp.name};
+      await link.close();}
+    return null;}
+  async waitFor(want,ms){const end=performance.now()+ms;
+    while(performance.now()<end){const d=await this.find(want);if(d)return d;await sleep(DELAY.retry);}return null;}
+  async serve(link,image,finish,idle,progress){
+    let served=0,last=performance.now();
+    for(;;){
+      const pkt=await link.read(DELAY.poll);
+      if(!pkt){if(link.lost)return {served,finished:false,lost:true};
+        if(performance.now()-last>idle)return {served,finished:false,lost:false};continue;}
+      const r=parseRequest(pkt);if(!r)continue;
+      const {fl,addr,n}=r;last=performance.now();
+      if(addr===FINISH_CHECK||addr===FINISH_WRITE){
+        link.send(response(addr,[...new TextEncoder().encode("success"),0]));
+        if(addr===finish)return {served,finished:true,lost:false};continue;}
+      if(n>MAXDATA||addr+n>image.length){this.ui.log(`  error: request ${addr.toString(16)}+${n} outside package bounds`,"er");
+        return {served,finished:false,lost:false};}
+      await sleep(DELAY.reply);
+      if(!link.send(response(addr,image.subarray(addr,addr+n),fl)))return {served,finished:false,lost:true};
+      served++;progress(served,addr+n);}}
+  async check(dev,image){
+    const ui=this.ui;ui.stage(`starting update on ${dev.id.text}`);
+    dev.link.send(Uint8Array.from(UPGRADE));await sleep(DELAY.start);
+    const r=await this.serve(dev.link,image,FINISH_CHECK,DELAY.idle_check,k=>ui.stage(`checking package (${k} reads)`));
+    await dev.link.close();
+    if(!r.finished)throw new Error("FM-1 stopped responding before the loader started. Reconnect USB and retry.");
+    ui.stage("switching to update mode");await sleep(DELAY.loader);
+    const ota=await this.waitFor(i=>i.loader,DELAY.wait_loader);
+    if(!ota)throw new Error("OTA loader did not appear. Reconnect USB and retry (the device will stay in update mode).");
+    return ota;}
+  async write(ota,image){
+    const ui=this.ui,total=image.length;ui.prog(0);ota.link.send(Uint8Array.from(UPGRADE));await sleep(DELAY.start);
+    const r=await this.serve(ota.link,image,FINISH_WRITE,DELAY.idle_write,(k,e)=>{const p=Math.min(99,Math.floor(e*100/total));ui.prog(p);ui.stage(`writing ${p}%`);});
+    await ota.link.close();
+    if(!r.finished)throw new Error("loader stopped responding. Reconnect USB and retry — writing will continue.");
+    ui.prog(100);ui.stage("writing 100%");}
+  async verify(product){
+    const ui=this.ui;ui.stage("rebooting");await sleep(DELAY.reboot);
+    const back=await this.waitFor(i=>!i.loader,DELAY.wait_reboot);
+    if(!back)throw new Error("FM-1 did not return after reboot — power-cycle it.");
+    await back.link.close();
+    if(back.id.text!==product)ui.log(`written, but FM-1 reports ${back.id.text} (expected ${product}). Power-cycle.`,"er");
+    else{ui.log(`done: FM-1 is running ${back.id.text}`,"ok");ui.stage("done");}}
+  async install(dev,image,product){
+    if(modelOf(dev.id.text)!==modelOf(product)){await dev.link.close();throw new Error(`device is ${dev.id.text}, but the package is for ${product}`);}
+    const ota=dev.id.loader?dev:await this.check(dev,image);
+    await this.write(ota,image);await this.verify(product);}
+}
+
+/* ============ UI ============ */
+if(typeof document!=="undefined"){
+const $=id=>document.getElementById(id);
+const ui={
+  log(s,c){const l=$("log"),e=document.createElement("span");if(c)e.className=c;e.textContent=s+"\n";l.appendChild(e);l.scrollTop=l.scrollHeight;},
+  stage(s){$("stage").textContent=s;},
+  prog(p){$("bar").firstElementChild.style.width=p+"%";}};
+let raw=null,product=null,busy=false;
+const setBusy=b=>{busy=b;$("bInfo").disabled=b;$("bFlash").disabled=b||!product;};
+window.addEventListener("beforeunload",e=>{if(busy){e.preventDefault();e.returnValue="";}});
+
+async function ensureMidi(){
+  if(access)return true;
+  if(!navigator.requestMIDIAccess){ui.log("Web MIDI unavailable: open the page in Chrome or Edge.","er");return false;}
+  try{access=await navigator.requestMIDIAccess({sysex:true});}
+  catch(e){ui.log("No MIDI access (SysEx must be enabled): "+(e.message||e),"er");return false;}
+  access.onstatechange=()=>{};return true;}
+
+async function loadFile(f){
+  raw=new Uint8Array(await f.arrayBuffer());product=productOf(raw);
+  if(!product||!/^[^_]+_\d+$/.test(product)){raw=null;product=null;
+    $("pkg").textContent="";ui.log(`${f.name}: not an FM-1 package (identity ${JSON.stringify(product)})`,"er");setBusy(busy);return;}
+  $("pkg").innerHTML="";$("pkg").append(`package: ${f.name} · ${product} · ${raw.length} bytes`);
+  if(!hasMark(raw))ui.log(`warning: package has no Felucca loader (identity ${product})`,"er");
+  setBusy(busy);}
+const drop=$("drop");
+drop.onclick=()=>$("file").click();
+$("file").onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("on");};
+drop.ondragleave=()=>drop.classList.remove("on");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("on");e.dataTransfer.files[0]&&loadFile(e.dataTransfer.files[0]);};
+
+async function findDevice(){
+  if(!await ensureMidi())return null;
+  ui.log("searching for FM-1…","mut");
+  const up=new Updater($("port").value,ui),dev=await up.find();
+  if(!dev){const n=[...access.inputs.values()].map(i=>i.name);
+    $("dev").textContent="FM-1 not found.";
+    ui.log("FM-1 not found. MIDI inputs: "+(n.length?n.join(", "):"(none)"),"er");return null;}
+  $("dev").textContent=`${dev.id.text} · ${dev.name}`+(dev.id.loader?" · update mode (writing will resume)":"");
+  ui.log(`device: ${dev.id.text} (${dev.name})`+(dev.id.loader?" [update mode]":""),"ok");
+  return {up,dev};}
+
+$("bInfo").onclick=async()=>{setBusy(true);try{const r=await findDevice();if(r)await r.dev.link.close();}
+  catch(e){ui.log("error: "+(e.message||e),"er");}setBusy(false);};
+
+$("bFlash").onclick=async()=>{
+  if(!raw)return;setBusy(true);ui.prog(0);ui.stage("");
+  try{
+    const r=await findDevice();if(!r){setBusy(false);return;}
+    if(!hasMark(raw)&&!confirm("The package has no Felucca loader. Flash anyway?")){await r.dev.link.close();setBusy(false);return;}
+    if(!confirm(`Flash ${product} to ${r.dev.id.text}?\nDo not disconnect FM-1 while writing.`)){await r.dev.link.close();setBusy(false);return;}
+    ui.log(`package: ${product} (${raw.length} bytes)`);
+    await r.up.install(r.dev,logicalImage(raw),product);
+  }catch(e){ui.log("error: "+(e.message||e),"er");}
+  setBusy(false);}
+}
+</script>
+<script>(function(){
+
+"use strict";
+/* --- format constants (worm_store.c / worm.h) --- */
+const NP=175, NPB=22, NMP=50, NMPB=7, NTRK=4, NMTRK=4, NPAT=16, BANK_SZ=36864;
+const BANK_MAGIC=[0x31,0x42,0x50,0x57];           // '1BPW' = 0x57504231 in little-endian
+const PAT_MAGIC=[0x4d,0x57,0x50,0x54];            // 'MWPT'
+const PAT_VER=1, PAT_HDR=16;
+const PLIST=[
+'ROOT','VEL','LEN','PROB','COND','FLT.T','LFO.T','PORT.T','PORTA','ALGO',
+'WAVE','PW','TUNE','OCT','DETUNE','SUB','LEVEL','WAVE2','PW2','TUNE2',
+'OCT2','DETUNE2','SUB2','LEVEL2','PITCH','PITCH','RATIO','FDBK','I.ENV','I.VEL',
+'RATIO','FDBK','I.ENV','I.VEL','HARMON','FOLD','MORPH','D/WET','DIST','PAN',
+'VOL','DRIVE','DELAY','REVERB','CHORUS','TIME','FDBK','FILT','MIX','SIZE',
+'DECAY','DAMP','MIX','RATE','DEPTH','DELAY','MIX','TRANS','CUTOFF','RESO',
+'TYPE','ENV','CUTOFF','RESO','TYPE','ENV','D/WET','D/WET','DEST','SPEED',
+'DEPTH','WAVE','MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH',
+'WAVE','MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH','WAVE',
+'MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH','WAVE','MODE',
+'SYNC','SLOPE','SMOOTH','SHIFT','ATK','DEC','SUS','REL','ATK','DEC',
+'SUS','REL','ATK','DEC','SUS','REL','ATK','DEC','SUS','REL',
+'ATK','DEC','SUS','REL','DEST','DEPTH','DRIVE','PAN','VOL','DRIVE',
+'PAN','VOL','DRIVE','PAN','VOL','DRIVE','PAN','VOL','E.HITS','E.OFS',
+'E.LIMIT','E.MUTE','SCALE','ROOT','CHORD','TRANSP','CLICK','VOL','PRE','SOUND',
+'-','-','-','-','DIR','LENGTH','SPEED','SWING','PAGES','VIEW',
+'STEP','mTIME','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL',
+'ARPMOD','ARPSPD','ARPOCT','ARPGAT','QUANT'];
+const MLIST=[
+'CHAN','PROG','BK.MSB','BK.LSB','VOL','PAN','QUANT','CHORD','MUTE','ARPMOD',
+'ARPSPD','ARPOCT','ARPGAT','CC','BASE','DEPTH','SPEED','WAVE','SYNC','PHASE',
+'CC','BASE','DEPTH','SPEED','WAVE','SYNC','PHASE','CC','BASE','DEPTH',
+'SPEED','WAVE','SYNC','PHASE','CC','BASE','DEPTH','SPEED','WAVE','SYNC',
+'PHASE','TO MIDI','RETRIG','R.LEN','R.VEL'];
+const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const pname=i=>PLIST[i]||('P'+i);
+const mname=q=>q<41?MLIST[q]:q<46?PLIST[q-41]+'(NOTE)':q<NMP?PLIST[138+q-46]+'(EUCL)':('M'+q);
+const noteName=n=>NOTE_NAMES[n%12]+(Math.floor(n/12)-1);
+const s8=v=>v>=128?v-256:v;
+
+/* --- CRC32 (zlib) --- */
+function crc32(b){let c=0xffffffff;for(let i=0;i<b.length;i++){c^=b[i];for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0);}return (c^0xffffffff)>>>0;}
+
+/* --- reading --- */
+class R{
+  constructor(b){this.b=b;this.i=0;}
+  need(n){if(this.i+n>this.b.length)throw new Error('pattern record truncated');}
+  u8(){this.need(1);return this.b[this.i++];}
+  u16(){this.need(2);const v=this.b[this.i]|(this.b[this.i+1]<<8);this.i+=2;return v;}
+  take(n){this.need(n);const v=this.b.subarray(this.i,this.i+n);this.i+=n;return v;}
+  vi(){let z=0,sh=0,c;for(;;){c=this.u8();z|=(c&127)<<sh;sh+=7;if(!(c&128))break;if(sh>28)throw new Error('LEB128 too long');}return (z&1)?-((z>>1)+1):(z>>1);}
+}
+function same(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
+
+function parseBank(buf){
+  if(buf.length<36||!same(buf.subarray(0,4),BANK_MAGIC))throw new Error('not an M-WORM bank (expected 1BPW)');
+  let o=4;const recs=[];
+  for(let p=0;p<NPAT;p++){
+    const n=buf[o]|(buf[o+1]<<8);o+=2;
+    if(o+n>buf.length)throw new Error('record exceeds file size');
+    recs.push(buf.slice(o,o+n));o+=n;
+  }
+  return recs;
+}
+function buildBank(recs){
+  const out=new Uint8Array(BANK_SZ);out.fill(0xff);out.set(BANK_MAGIC,0);
+  let o=4;
+  recs.forEach(r=>{
+    if(o+2+r.length>BANK_SZ)throw new Error('bank full');
+    out[o]=r.length&255;out[o+1]=r.length>>8;o+=2;out.set(r,o);o+=r.length;
+  });
+  return out;
+}
+function readSeq(r){
+  const n=r.u16();if(n>128)throw new Error('too many steps: '+n);
+  const steps=[];
+  for(let i=0;i<n;i++){
+    const raw=r.take(13),nl=raw[8];if(nl>6)throw new Error('too many p-locks: '+nl);
+    const links=[];for(let k=0;k<nl;k++)links.push([r.u8(),r.u16()]);
+    let rv=(raw[1]>>1)&127;if(rv&64)rv-=128;
+    steps.push({step:raw[0]&127,on:raw[0]&1,rtv:rv,note:raw[2],vel:raw[3],len:(raw[4]&7)+1,
+      rtr:(raw[4]>>3)&15,prob:raw[5],cond:raw[6]&15,rtl:(raw[6]>>4)&7,mt:s8(raw[7]),links:links});
+  }
+  return steps;
+}
+function readPatch(r,count){
+  const bm=r.take((count+7)>>3),out={};
+  for(let i=0;i<count;i++)if(bm[i>>3]&(1<<(i&7)))out[i]=r.vi();
+  return out;
+}
+function parsePattern(rec){
+  const r=new R(rec),tracks=[];
+  for(let t=0;t<NTRK;t++){
+    const steps=readSeq(r);
+    const modeKeys=['len','dir','spd','swg','pg','vp','mute'],modes={};
+    modeKeys.forEach(k=>modes[k]=r.u8());
+    const patch=readPatch(r,NP),na=r.u8(),aut=[];
+    for(let i=0;i<Math.min(na,64);i++)aut.push([r.u8(),r.u8(),r.u16()]);
+    tracks.push({steps,modes,patch,aut});
+  }
+  const gpatch=readPatch(r,NP);
+  let mmask=0,amo=0;
+  if(r.i+2<=rec.length){mmask=r.u8();amo=r.u8();}
+  const mtrks=[];
+  for(let k=0;k<NMTRK;k++)if(mmask&(1<<k)){
+    const steps=readSeq(r),modes={};['len','dir','spd','swg','pg','vp'].forEach(key=>modes[key]=r.u8());
+    mtrks.push({k,steps,modes,patch:readPatch(r,NMP)});
+  }
+  return {tracks,gpatch,amo,mtrks,bytes:rec.length};
+}
+
+/* --- state and UI --- */
+const S={banks:[],sel:null};
+const $=id=>document.getElementById(id);
+function bankLetter(b){const m=/BANK_?([A-H])/i.exec(b.fileName);return m?m[1].toUpperCase():'ABCDEFGH'[Math.max(0,S.banks.indexOf(b))]||'A';}
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function msg(t,err){const e=$('dmsg');e.textContent=t;e.className=err?'err':'';}
+function render(){
+  const box=$('dbanks');
+  if(!S.banks.length){box.innerHTML='<div class="hint">No files loaded yet</div>';}
+  else{
+    box.innerHTML=S.banks.map((b,bi)=>{
+      const used=b.recs.filter(r=>r.length).length;
+      const slots=b.recs.map((r,i)=>{
+        const sel=S.sel&&S.sel.bi===bi&&S.sel.slot===i;
+        return '<div class="slot '+(r.length?'used':'')+' '+(sel?'sel':'')+'" data-bi="'+bi+'" data-slot="'+i+'">'+
+          String(i+1).padStart(2,'0')+'</div>';
+      }).join('');
+      return '<div class="bank"><div class="name">'+esc(b.name)+'</div><div class="meta">'+used+'/16 patterns · '+esc(b.fileName)+'</div><div class="slots">'+slots+'</div></div>';
+    }).join('');
+    box.querySelectorAll('.slot').forEach(el=>el.onclick=()=>select(+el.dataset.bi,+el.dataset.slot));
+  }
+  const has=!!S.sel;
+  const filled=has&&S.banks[S.sel.bi].recs[S.sel.slot].length>0;
+  $('dbExtract').disabled=!filled;
+  $('dbAll').disabled=!S.banks.length;
+  $('dbBank').disabled=!has;
+  $('dbImportLbl').style.display=has?'':'none';
+}
+function select(bi,slot){
+  S.sel={bi,slot};render();
+  msg(S.banks[bi].recs[slot].length?'':'Empty slot — you can paste a pattern');
+}
+function download(name,bytes){
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));
+  const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* --- loading files --- */
+async function loadFiles(list){
+  let bad=0,added=0;
+  for(const f of list){
+    try{
+      const buf=new Uint8Array(await f.arrayBuffer());
+      const name=f.name.toUpperCase();
+      if(name.endsWith('.WPB')){
+        const recs=parseBank(buf);
+        S.banks.push({name:f.name.replace(/\.[^.]+$/,''),fileName:f.name,data:buf,recs});
+        added++;
+      }else if(name.endsWith('.PAT')){
+        if(!S.sel){msg('Select a slot first, then paste .pat',true);bad++;continue;}
+        importPat(buf,S.sel.bi,S.sel.slot,f.name);
+      }else{bad++;}
+    }catch(e){msg(f.name+': '+e.message,true);bad++;}
+  }
+  render();
+  if(added)msg('Banks loaded: '+added+(bad?'; files skipped: '+bad:''));
+}
+function importPat(pat,bi,slot,src){
+  if(pat.length<PAT_HDR+1||!same(pat.subarray(0,4),PAT_MAGIC))throw new Error('not an M-WORM pattern');
+  if(pat[4]!==PAT_VER)throw new Error('unknown .pat version');
+  const len=pat[8]|(pat[9]<<8)|(pat[10]<<16)|(pat[11]<<24);
+  const crc=(pat[12]|(pat[13]<<8)|(pat[14]<<16)|(pat[15]<<24))>>>0;
+  const rec=pat.slice(PAT_HDR);
+  if(rec.length!==len||crc32(rec)!==crc)throw new Error('length/CRC mismatch — file corrupted');
+  parsePattern(rec);
+  const b=S.banks[bi];b.recs[slot]=rec;b.data=buildBank(b.recs);
+  S.sel={bi,slot};render();
+  msg('Pasted into '+b.fileName+' / '+String(slot+1).padStart(2,'0'));
+}
+
+/* --- events --- */
+$('ddrop').onclick=()=>$('dfiles').click();
+$('dfiles').onchange=e=>{const list=Array.from(e.target.files);e.target.value='';loadFiles(list);};
+['dragenter','dragover'].forEach(ev=>$('ddrop').addEventListener(ev,e=>{e.preventDefault();$('ddrop').classList.add('over');}));
+['dragleave','drop'].forEach(ev=>$('ddrop').addEventListener(ev,e=>{e.preventDefault();$('ddrop').classList.remove('over');}));
+$('ddrop').addEventListener('drop',e=>loadFiles(Array.from(e.dataTransfer.files)));
+
+$('dbExtract').onclick=()=>{
+  const b=S.banks[S.sel.bi],rec=b.recs[S.sel.slot];
+  const out=new Uint8Array(PAT_HDR+rec.length);
+  out.set(PAT_MAGIC,0);out[4]=PAT_VER;out[5]='ABCDEFGH'.indexOf(bankLetter(b));out[6]=S.sel.slot;
+  out[8]=rec.length&255;out[9]=(rec.length>>8)&255;out[10]=(rec.length>>16)&255;out[11]=(rec.length>>24)&255;
+  const c=crc32(rec);out[12]=c&255;out[13]=(c>>8)&255;out[14]=(c>>16)&255;out[15]=(c>>24)&255;
+  out.set(rec,PAT_HDR);
+  download('PAT_'+bankLetter(b)+String(S.sel.slot+1).padStart(2,'0')+'.pat',out);
+  msg('Pattern extracted');
+};
+$('dpatFile').onchange=e=>{
+  const f=e.target.files[0];e.target.value='';
+  if(!f)return;
+  if(!S.sel){msg('Select a slot to paste into first',true);return;}
+  const bi=S.sel.bi,slot=S.sel.slot;
+  f.arrayBuffer().then(buf=>{try{importPat(new Uint8Array(buf),bi,slot,f.name);render();}catch(err){msg(err.message,true);}});
+};
+$('dbAll').onclick=()=>{
+  let n=0;
+  S.banks.forEach(b=>b.recs.forEach((rec,i)=>{
+    if(!rec.length)return;parsePattern(rec);
+    const out=new Uint8Array(PAT_HDR+rec.length);out.set(PAT_MAGIC,0);out[4]=PAT_VER;out[5]='ABCDEFGH'.indexOf(bankLetter(b));out[6]=i;
+    out[8]=rec.length&255;out[9]=(rec.length>>8)&255;out[10]=(rec.length>>16)&255;out[11]=(rec.length>>24)&255;
+    const c=crc32(rec);out[12]=c&255;out[13]=(c>>8)&255;out[14]=(c>>16)&255;out[15]=(c>>24)&255;out.set(rec,PAT_HDR);
+    download('PAT_'+bankLetter(b)+String(i+1).padStart(2,'0')+'.pat',out);n++;
+  }));
+  msg('Patterns extracted: '+n);
+};
+$('dbBank').onclick=()=>{
+  const b=S.banks[S.sel.bi];download(b.fileName,b.data);msg('Bank ready to save: '+b.fileName);
+};
+$('dbClose').onclick=()=>{S.banks=[];S.sel=null;render();msg('');};
+render();
+
+})();</script>
+<script>
+(function(){
+  var bs=document.querySelectorAll('.tabbtn'), ts=document.querySelectorAll('.tab');
+  bs.forEach(function(b){b.onclick=function(){
+    bs.forEach(function(x){x.classList.toggle('on',x===b);});
+    ts.forEach(function(t){t.hidden=(t.id!==b.dataset.tab);});
+  };});
+})();
+</script>
+</body>
+</html>
