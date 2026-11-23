@@ -1,14 +1,9 @@
 # M-WORM — User Manual
 
-M-WORM is an open-source groovebox for the **M-VAVE FM-1**. This manual replaces the old short
-manual and describes the current `fm1-base/mworm` build, identity **FM-1_2100**.
+M-WORM — a groovebox inspired by Electron.
 
-- 4 independent audio tracks: VA/FM synth, sequencer, effects, p-locks and automation.
+- 4 independent audio tracks, 4 monophonic voices: VA/FM synth, sequencer, effects, p-locks and automation.
 - 4 MIDI tracks M1–M4: notes, CC, program changes and banks over USB.
-- 4 monophonic voices, render rate 44,100 Hz. Rendering is split between CPU0 and CPU1: the
-  second core calculates voices and reverb, while delay, chorus, bus summing, master and limiter
-  stay on CPU0. If CPU1 fails to respond, the state is rolled back and the block is finished on
-  CPU0 — sound keeps running. Any split produces output bit-identical to single-core rendering.
 
 Signal path of one track:
 
@@ -47,13 +42,6 @@ Delay, reverb and chorus are shared; the send level is set per track in `AMP →
    **HOME + OP** to switch tabs inside a page.
 6. **HOME** works as Shift/Func; see the combinations below.
 7. **PLAY** starts/stops playback. **SAVE** saves the pattern.
-
-What changed compared with the old manual:
-
-- Each audio track has **4 LFOs** (not 8); every MIDI track also has 4 CC LFO lines.
-- There are **4 monophonic voices**, one per audio track; no polyphony or unison in this build.
-- A short **EDIT** press selects a pattern; holding **EDIT** selects a bank.
-- The second core is now used; there is nothing to enable or configure manually.
 
 ---
 
@@ -278,17 +266,13 @@ the four track sequences, each track's sound (patch, length/direction/swing, MUT
 global FX and parameters. BPM is project-wide. A new pattern starts with empty sequences but
 takes the current sound and effects; switching bank loads pattern 1 of the new bank.
 
-Switching does not write to flash immediately: the bank lives in memory, changed sectors are
-written when idle (STOP, about 1.5 s), while SAVE and bank switching write at once. If a
-pattern does not fit (36 KB for 16 patterns), `BANK FULL` appears and you stay on the current
-pattern with your edits intact.
 
 **Presets** A01…A32 start with factory sounds; user presets are stored in NOR and survive
 pattern changes. A preset changes only the track sound (OSC/AMP/SEND/FLT/LFO/ENV), not FX or
 global parameters.
 
-On a computer the banks appear as a disk `M-WORM PATTERNS` with files `BANK_A.WPB … BANK_H.WPB`
-(GLO → USB → MASS STORAGE). For individual patterns use `mworm_bank_tool.py`.
+On a computer the banks appear as a disk `M-WORM` with files `BANK_A.WPB … BANK_H.WPB`
+(GLO → USB → MASS STORAGE). For individual patterns use `mworm_tool.html`.
 
 ---
 
