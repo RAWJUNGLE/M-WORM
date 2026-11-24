@@ -5,7 +5,7 @@
 
 | Feature | Capabilities |
 | --- | --- |
-| Sound | 4 mono voices, per - track -> VA and FM, two oscillators, filters, envelopes, LFOs, parameter modulation |
+| Sound | 6 mono voices, per - track -> VA, FM, two oscillators, WT one oscillator, filters, envelopes, LFOs, parameter modulation |
 | Sequencer | 128 steps, 8 pages, per-step p-locks, retrigs, conditions, microtiming, Euclidean rhythms, chords |
 | Presets | 32 slots, including a preset per step |
 | Effects | delay / reverb / chorus + master limiter |
