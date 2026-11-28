@@ -3,6 +3,6 @@
   "author": "RAWJUNGLE",
   "kinds": ["synth", "groove"],
   "image": "docs/card.png",
-  "color": "#3EFF8F",
+  "color": "#E5F21C",
   "sounds": "own: wavetables generated from my own source WAVs"
 }
