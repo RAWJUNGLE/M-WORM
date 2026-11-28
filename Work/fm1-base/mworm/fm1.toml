@@ -1,6 +1,6 @@
 # M-WORM: build settings (tools/build.py)
 name = "M-WORM"                 # APP_NAME is in app.h; this names the build's files
-id_prefix = "FM-1_21"           # package identity (each firmware its own): dev FM-1_2100, releases FM-1_21XXYYZZ
+id_prefix = "FM-1_2393"         # package identity (each firmware its own): dev FM-1_239300, releases keep this identity
 usb_manufacturer = "M-WORM"
 usb_product = "M-WORM FM-1"
 

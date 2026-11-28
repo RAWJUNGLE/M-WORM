@@ -44,10 +44,10 @@ python3 tools/build.py mworm
 Output:
 
 ```text
-Work/fm1-base/mworm/build/m-worm.fwsc   # identity FM-1_2100
+Work/fm1-base/mworm/build/m-worm.fwsc   # identity FM-1_239300
 ```
 
-Build figures: image `482828 B`, RAM `.data+.bss` `92280 / 98304`, pool `334984 / 344064`. Building this repository produces the bit-identical package: SHA256 `6b6a044d6e4644c48d2d643048675e422a0878a88177a745dcbec626d09b137d`.
+Build figures: image `482828 B`, RAM `.data+.bss` `92280 / 98304`, pool `334984 / 344064`. Building this repository produces the bit-identical package: SHA256 `0629630fdb0df77ef4ab8dd86ce7d0c5644f13041e53050037bee435aa41d80a`.
 
 ## 5. Flashing
 

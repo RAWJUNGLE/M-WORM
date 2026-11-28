@@ -1,0 +1,8 @@
+{
+  "what": "M-WORM is an open-source groovebox engine for the M-VAVE FM-1: six-voice wavetable and FM-style synthesis, a 16-step sequencer, live effects, patch and pattern storage, plus USB and TRS MIDI.",
+  "author": "RAWJUNGLE",
+  "kinds": ["synth", "groove"],
+  "image": "docs/card.png",
+  "color": "#3EFF8F",
+  "sounds": "own: wavetables generated from my own source WAVs"
+}
