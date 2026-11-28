@@ -1,0 +1,6 @@
+build/
+!mworm/build/
+!mworm/build/m-worm.fwsc
+__pycache__/
+*.pyc
+.DS_Store

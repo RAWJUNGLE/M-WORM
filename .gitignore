@@ -1,0 +1,28 @@
+# Local environments and SDK/toolchain (never in git)
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.flasher-venv/
+.toolchain/
+sdk/
+Work/fw-AC79_AIoT_SDK/
+Work/backups/
+Work/repos/
+Work/*.zip
+
+# Build products. The only committed binary is the ready-to-flash package.
+*.o
+*.elf
+*.map
+*.dis
+*.bin
+*.fwsc
+Work/fm1-base/**/build/*
+!Work/fm1-base/mworm/build/
+!Work/fm1-base/mworm/build/m-worm.fwsc
+
+# Generated site / release output
+dist/
+release/
+node_modules/

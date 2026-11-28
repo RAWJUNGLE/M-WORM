@@ -1,0 +1,42 @@
+# M-WORM: build settings (tools/build.py)
+name = "M-WORM"                 # APP_NAME is in app.h; this names the build's files
+id_prefix = "FM-1_21"           # package identity (each firmware its own): dev FM-1_2100, releases FM-1_21XXYYZZ
+usb_manufacturer = "M-WORM"
+usb_product = "M-WORM FM-1"
+
+# Ядро WORM (UI + компактный synth + seq + store). Голоса рендера делятся между CPU0 и CPU1
+# (порт второго ядра из MONO2K: младшие голоса считает CPU0, старшие — CPU1, суммы складываются в исходном порядке).
+cpu2 = true
+cpu2_fallback = true          # при отказе CPU1 — одно ядро до перезагрузки, без ребута
+o2 = [
+  "div64.c",
+  "worm/worm_params.c",
+  "worm/worm_synth.c",
+  "worm/worm_seq.c",
+  "worm/worm_midi.c",
+  "worm/worm_store.c",
+  "worm/worm_live.c",
+  "worm/worm_lfx.c",
+  "worm/worm_ui.c",
+  "worm/worm_wt.c",
+  "worm/worm_wt_data.c",
+  "worm/worm_wt_main.c",
+]
+o2_cflags = ["-Imworm", "-Imworm/worm",
+             "-isystem", "/opt/jieli/pi32v2/include",
+             "-cl-single-precision-constant"]
+
+usb_host = true                # USB как MIDI-хост (GLO > MIDI): внешний синт, напр. Roland S-1 (питание — через активный хаб)
+msc = true                     # USB Mass Storage (GLO > USB > MASS STORAGE): банки/паттерны как FAT12-диск; отдельный режим, без аудио/MIDI
+ble = false                     # no radio: USB-MIDI + TRS-MIDI only (GPL-3.0 engine)
+fontset = "pressstart2p"        # Press Start 2P (arcade pixel font) instead of the default Barlow
+
+# Второе ядро включено выше (cpu2 = true). Раньше здесь была заметка об отказе CPU1 на части экземпляров;
+# теперь при отказе включён cpu2_fallback: рендер продолжает работать на CPU0, без ребута.
+# Фаза 1: голоса делятся между ядрами по замеренной стоимости; фаза 2: reverb — на CPU1, delay/chorus/слияние — на CPU0.
+# Мастер и лимитер (последовательная часть блока) остаются на CPU0; звук при любом разбиении совпадает с одним ядром бит в бит (см. worm_synth.c).
+# the site (tools/make_site.py, tools/publish_site.sh)
+tagline = "an open-source groovebox engine for the FM-1"
+repo = "https://github.com/yourname/m-worm"
+licence = "GPL-3.0-only"
+credits = "M-WORM: WORM groovebox core (UI + synth + seq) on fm1-base (MPL-2.0)"

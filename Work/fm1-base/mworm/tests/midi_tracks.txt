@@ -1,0 +1,83 @@
+# MIDI-дорожки M1..M4: выбор SEL + клавиши шагов 16/15/14/13, ноты, CHAN/PROG/BANK, CC-LFO, p-lock CC, MUTE, арпеджио, сохранение.
+# Запуск: tools/build.py mworm --host (CC=clang), затем  mworm/build/host/m-worm_host mworm/tests/midi_tracks.txt OUTDIR
+wait 300
+# --- M1 (w15): 4 шага -> ноты на канале 1
+press SEL
+tapkey w15
+release SEL
+tap REC
+tapkey w0
+tapkey w4
+tap REC
+out
+tap PLAY
+wait 1200
+tap PLAY
+expect_out USB 90 3C 64
+expect_out USB 80 3C 00
+# --- звуковая дорожка T1 по-прежнему не шлёт MIDI
+press SEL
+tapkey w0
+release SEL
+out
+tapkey w4
+wait 200
+expect_no_out USB 90 3C 64
+# --- M2 (w14): CHAN 5, PROG 11 -> Program Change на канале 5
+press SEL
+tapkey w14
+release SEL
+press HOME
+tapkey b1
+release HOME
+out
+spin K1 3
+spin K2 11
+wait 100
+expect_out USB C4 0A 00
+# --- CC-LFO 1: CC 74, BASE 64 (статический CC, DEPTH 0) на канале 5
+tap LFO
+spin K1 75
+wait 100
+expect_out USB B4 4A 40
+# --- MUTE M2 (SEL + HOME + OP1..4): после этого дорожка молчит
+tap REC
+tapkey w0
+tap REC
+press SEL
+press HOME
+tapkey b1
+release HOME
+release SEL
+out
+tap PLAY
+wait 600
+tap PLAY
+expect_no_out USB 94 3C 64
+# --- арпеджио на M3 (w13, канал 3): UP, три клавиши -> разные ноты
+press SEL
+tapkey w13
+release SEL
+tap ARP
+turn K1 1
+key w0 down
+key w2 down
+key w4 down
+wait 700
+key w0 up
+key w2 up
+key w4 up
+wait 100
+expect_out USB 92 39 64
+expect_out USB 92 3C 64
+# --- сохранение паттерна и перезагрузка: настройки M2 (канал 5) остались
+tap SAVE
+tap OCT+
+wait 3000
+reboot
+wait 500
+press SEL
+tapkey w14
+release SEL
+wait 200
+expect_out USB C4 0A 00   # PROG 11 / канал 5 восстановлены из сохранённого паттерна

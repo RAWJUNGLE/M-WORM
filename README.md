@@ -1,165 +1,135 @@
-# M-WORM
+# M-WORM FM-1
 
-**Elektron-style groovebox on MVAVE FM-1**
----
+**Open-source groovebox firmware for the M-VAVE FM-1 (JieLi AC791N).**
 
-| Feature | Capabilities |
-| --- | --- |
-| Sound | 6 mono voices, per - track -> VA, FM, two oscillators, WT one oscillator, filters, envelopes, LFOs, parameter modulation |
-| Sequencer | 128 steps, 8 pages, per-step p-locks, retrigs, conditions, microtiming, Euclidean rhythms |
-| Presets | 32 slots, including a preset per step |
-| Effects | delay / reverb / chorus + master limiter |
-| MIDI | 4 MIDI tracks, USB device and USB host, CC lanes, MIDI panic (All Notes Off) |
-| Memory | 8 banks × 16 patterns = 128 patterns |
-| Connectivity | USB audio, USB MIDI, USB disk for bank files |
-
-
-# M-WORM FM-1 — How the sound works
-
-> **In one sentence:** the pattern says *what* to play → the sequencer decides *when* → the voice takes the note → the engine makes the sound → AMP/ADSR sets the level → the filter shapes the tone → TRANSIENT adds the attack → the dry signal and SENDS go to the mixer/FX → master → limiter → output.
+English version: [README_EN.md](README_EN.md). Схема звука: [RU](SCHEME_RU.md) / [EN](SCHEME_EN.md). Русская версия ниже.
 
 ---
 
-## Signal flow
+## Что это сейчас
 
-> GitHub draws its own pan/zoom controls over Mermaid; the `diagramPadding` setting below keeps them away from the content.
+- **6 аудиодорожек = 6 монофонических голосов**, плюс 4 MIDI-дорожки. Пула голосов и стилинга нет: ретриггер перезапускает тот же голос.
+- Три движка: **VA** (`WAVE 0..5`), **WAVETABLE** (`WAVE 6..57`) и **FM** (8 алгоритмов, операторы `C/A/B1/B2`).
+- **BPM лежит в паттерне**; паттерны переключаются строго на границе такта.
+- У каждой дорожки: свои часы (длина, направление, скорость, свинг), 4 LFO, свободный `ENV4`, p-lock/automation.
+- На голос: 5 ADSR (`E0/E3` — AMP, `E1/E2` — фильтры, `E4` — свободная), 2 фильтра TPT SVF (`OFF/LP/HP/BP`), AMP DIST, VOL/PAN, TRANSIENT и 3 send-а (`DELAY/REVERB/CHORUS`).
+- Рендер делится между **CPU0 и CPU1**: второй ядро считает часть голосов и реверб; при отказе есть откат на одно ядро.
+- Выход: динамик через I2S/ALNK0, USB-аудио (мастер 2ch/24bit/48k или FX 6ch/16bit/44.1k) и виртуальный диск MSC (`WTABLE.WPT`, банки `.WPB`, паттерны `.pat`).
 
-```mermaid
-%%{init: {"flowchart": {"diagramPadding": 150}}}%%
-flowchart LR
-    SEQ["**SEQ**<br/>pattern · BPM · bar<br/>EUC · PROB · COND · RETRIG"]
-    V["**VOICE ×6**<br/>one voice per track"]
-    E["**ENGINE**<br/>VA · WT · FM"]
-    S["**SHAPE**<br/>AMP/ADSR ×2<br/>FLT/ADSR ×2"]
-    O["**OUT AMP**<br/>DIST · VOL/PAN<br/>TRANSIENT"]
-    D["**DRY**<br/>L / R"]
-    SND["**SENDS**<br/>DLY · REV · CHO"]
-    FX["**FX → RETURNS**"]
-    MIX(("MIX"))
-    M["**MASTER**<br/>DC · LIMITER"]
-    OUT(["**OUT**<br/>speaker · USB · disk"])
+Полная схема сигнального тракта — **[SCHEME_RU.md](SCHEME_RU.md)** / **[SCHEME_EN.md](SCHEME_EN.md)**.
 
-    SEQ --> V --> E --> S --> O
-    O --> D --> MIX
-    O --> SND --> FX --> MIX
-    MIX --> M --> OUT
+> Старые комментарии в коде и `Work/fm1-base/mworm/docs/MANUAL.md` местами говорят про 4 дорожки и «неиспользуемый CPU1» — это устарело. Актуально только то, что в коде `mworm/worm/`.
 
-    classDef seq fill:#141414,stroke:#8792a0,color:#ececec;
-    classDef voice fill:#0d0e02,stroke:#e5f21c,color:#ececec;
-    classDef bus fill:#141414,stroke:#3a3a3a,color:#ececec;
-    classDef out fill:#e5f21c,stroke:#e5f21c,color:#000000;
-    class SEQ seq;
-    class V,E,S,O voice;
-    class D,SND,FX,MIX bus;
-    class M,OUT out;
-```
+---
 
-If Mermaid does not render, here is the same chain as text:
+## Состав репозитория
 
 ```text
-PATTERN → SEQUENCER → VOICE → ENGINE
-        → AMP/ADSR ×2 → FILTER ×2 + ADSR ×2
-        → AMP DIST → VOL/PAN → TRANSIENT
-        → { DRY → L/R   ‖   SENDS → FX → RETURNS }
-        → MIX → MASTER → DC BLOCK → LIMITER → OUTPUT
+Work/fm1-base/           платформа fm1-base + BSP (включён со локальными правками)
+  mworm/                  исходники прошивки M-WORM (app.c, worm/*.c, docs, web, tests)
+  mworm/build/m-worm.fwsc готовый прошиваемый пакет FM-1_2100
+  tools/, device/, bsp/   сборщик пакета, платформа, BSP
+Work/tables/              40 исходных WAV для генерации встроенных wavetable
+scripts/run_core_tests.sh регрессионные тесты ядра (host, -ffp-contract=off)
+flash.sh, mworm_flash.py  прошивка по USB-MIDI (Felucca-протокол)
+mworm_tool_RU/EN.html     веб-утилита для банков/паттернов
+mworm_bank_tool.*         CLI для BANK_x.WPB
+MANUAL_RU/EN.md           руководство пользователя
+FLASHER.md                инструкция по прошивке
+AGENTS.md                 правила для ИИ-агентов (прошивку и протокол менять нельзя)
 ```
 
----
-
-## 1. Sequencer
-
-| Block | What it does |
-|---|---|
-| **PATTERN** | Stores steps: note, velocity, length, p-lock. BPM lives in the pattern (`B7 + u16 BPM*10`). |
-| **CLOCK / BAR** | Tracks BPM, the bar, and each track's own clock: length, direction, speed, swing. |
-| **TRIGGER** | Decides whether to play a step: EUCLID, `PROB`, conditions `1ST / FILL / 4BAR / NEV`, `RETRIG`. |
-| **Pattern change** | Queued and applied exactly at the bar boundary so the rhythm is not cut. |
-| **P-lock / AUT** | Step preset first, then its p-locks; on top — automation, 4 LFOs and free ENV4. |
+**Не включено намеренно:** JieLi AC79 SDK, Linux toolchain, `.venv`, `.flasher-venv`, бэкапы, старые прототипы и бинарные образы стоковой прошивки. См. [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ---
 
-## 2. Voice and engine
+## Быстрый старт: прошить готовую прошивку
 
-**6 audio tracks = 6 monophonic voices.** Each track has its own voice, patch and clock. There is no voice pool: a retrigger restarts the same voice.
+```sh
+./flash.sh --info
+./flash.sh Work/fm1-base/mworm/build/m-worm.fwsc
+```
 
-| Engine | Range | Sound source |
-|---|---|---|
-| **VA** | `WAVE 0..5` | `SIN · TRI · SAW · SQR · PLS · NOI` |
-| **WAVETABLE** | `WAVE 6..10` | 5 main tables, 64 frames each, built into firmware |
-|  | `WAVE 11..17` | 7 user slots from `WTABLE.WPT` |
-|  | `WAVE 18..57` | 40 library tables, built into firmware |
-| **FM** | 8 algorithms | Operators `C / A / B1 / B2`, `X / Y` crossfade, equal-power `MIX` |
+Нужен data-кабель, FM-1 включён, другие MIDI-программы закрыты. Первый запуск сам создаст `.flasher-venv` и поставит `mido` + `python-rtmidi`.
 
-> Do not confuse: global `ALGO` selects **VA / FM / WT**, while `0..7` is the FM algorithm number inside the engine.
-
----
-
-## 3. AMP, ADSR and filters
-
-| Envelope | Purpose |
-|---|---|
-| `E0` | AMP of the `OSC1 + SUB` channel |
-| `E3` | AMP of the `OSC2` channel |
-| `E1` | Filter `F1` |
-| `E2` | Filter `F2` |
-| `E4` | Free ADSR for `DEST` routing — not a separate block in the chain |
-
-Order inside a voice:
+Пакет в репозитории:
 
 ```text
-generator → drive → AMP/ADSR → its own filter
+Work/fm1-base/mworm/build/m-worm.fwsc
+SHA256 6b6a044d6e4644c48d2d643048675e422a0878a88177a745dcbec626d09b137d
+Identity FM-1_2100
 ```
 
-- **VA / WAVETABLE:** `F1` works on `X / OSC1`, `F2` works on `Y / OSC2`; the two channels are parallel.
-- **FM:** the `OSC2` channel is off; `F2` runs **after `F1`, in series**, on `X`.
-- FM also has its own envelopes for operators `A` and `B` inside the engine.
+Пересборка из этого репозитория даёт бит-идентичный пакет (проверено host/device-сборкой).
 
-Filter types: `OFF / LP / HP / BP` (TPT SVF).
+Контрольные суммы всех инструментов — в `SHA256SUMS`.
+
+Подробности: **[FLASHER.md](FLASHER.md)**. Прошивка производится только по явному запросу — скрипт всегда спрашивает подтверждение, `--yes` пропускает его.
 
 ---
 
-## 4. TRANSIENT, SENDS and FX
+## Сборка из исходников
 
-After the filter, the signal goes through:
+Нужны:
 
-```text
-AMP DIST → AMP VOL / PAN → AMP TRANSIENT
+- Python 3.11+ и `pip install -r requirements-build.txt` (Pillow нужен генератору шрифта);
+- `AC79_SDK` — checkout JieLi AC79 AIoT SDK (в репозиторий не входит, не перераспределяется);
+- `JIELI_TOOLCHAIN` — Linux x86-64 toolchain JieLi. На macOS сборка идёт через docker/linux/amd64 (подними `colima start --arch x86_64`);
+- `cc` (host-тесты), `emcc` — только для web/rfm1 сборок.
+
+```sh
+cd Work/fm1-base
+
+# Хост-симулятор (быстро, без toolchain)
+python3 tools/build.py mworm --host
+mworm/build/host/m-worm_host mworm/tests/basic.txt mworm/build/host
+
+# Прошивка для устройства
+AC79_SDK=/path/to/fw-AC79_AIoT_SDK \
+JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchain \
+python3 tools/build.py mworm
 ```
 
-- **AMP TRANSIENT** — attack accent: the note hits harder at the start and quickly decays. It is a per-track setting and can be p-locked and modulated.
-- **SENDS** — send levels of a copy of the sound to the shared effects: `SEND DELAY`, `SEND REVERB`, `SEND CHORUS`.
-- **The dry signal and SENDS run in parallel**, not one after the other.
-- **RETURNS** come back from the FX block and join the dry signal just before master.
+Результат: `Work/fm1-base/mworm/build/m-worm.fwsc`.
 
-Result:
+Регрессии ядра (флаг `-ffp-contract=off` обязателен, иначе плавающая арифметика даёт лишние расхождения):
 
-```text
-                 ┌─ DRY → L/R ────────────┐
-TRANSIENT ───────┤                        ├→ MIX → MASTER → DC → LIMITER → OUTPUT
-                 └─ SENDS → FX → RETURNS ─┘
+```sh
+./scripts/run_core_tests.sh
+# ожидаемо: 28 PASS / 0 FAIL / 3 SKIP
+# SKIP: t_euclid, t_pattern_pick, t_store_tail (устаревшие тесты FM4)
 ```
 
-`DC BLOCK` before the limiter removes the DC offset.
+---
+
+## Утилиты
+
+Открой `mworm_tool_RU.html` / `mworm_tool_EN.html` в браузере — это автономные страницы для банков, паттернов и wavetable.
+
+```sh
+python3 mworm_bank_tool.py list
+python3 mworm_bank_tool.py show A 3
+python3 mworm_bank_tool.py extract A 3 -o pat.pat
+python3 mworm_bank_tool.py import pat.pat B 5
+python3 mworm_bank_tool.py verify
+./put_bank.command                 # положить скачанный BANK_x.WPB на диск FM-1
+```
+
+`mworm_tool_RU.html` / `mworm_tool_EN.html` — автономные HTML-файлы, просто открой их в браузере.
 
 ---
 
-## 5. Under the hood
+## Документация
 
-- Rendering is split into 64-sample chunks; the boundaries line up with sequencer events.
-- **CPU1** computes part of the active voices and the reverb.
-- **CPU0** computes the remaining voices, delay, chorus, buses, master and limiter.
-- If CPU1 does not respond, calculations roll back to CPU0 and it falls back to a single core.
-
----
-
-## 6. Where the sound goes
-
-| Output | What it is |
-|---|---|
-| **FM-1 speaker** | 24-bit stream through ALNK0 / I2S to the external codec |
-| **USB audio** | mixer with computer recording/playback |
-| **MSC virtual disk** | `WTABLE.WPT`, `.WPB` banks, `.pat` patterns, projects |
+- [MANUAL_RU.md](MANUAL_RU.md) / [MANUAL_EN.md](MANUAL_EN.md) — пользовательское руководство.
+- [SCHEME_RU.md](SCHEME_RU.md) / [SCHEME_EN.md](SCHEME_EN.md) — как устроен звук.
+- [FLASHER.md](FLASHER.md) — прошивка.
+- [ХАРАКТЕРИСТИКИ.md](ХАРАКТЕРИСТИКИ.md) / [ХАРАКТЕРИСТИКИ_EN.md](ХАРАКТЕРИСТИКИ_EN.md) — спецификация.
+- [ХОТКЕИ.txt](ХОТКЕИ.txt) — хоткеи по коду.
+- [AGENTS.md](AGENTS.md) — запрет на изменение протокола/инструментов прошивки.
 
 ---
 
-> Old code comments and `docs/MANUAL.md` still mention 4 tracks/voices and an "unused CPU1". That is outdated: the current scheme has 6 voices and CPU1 is used.
+## Лицензия
+
+Код M-WORM — **GPL-3.0-only** (`LICENSE`). Платформа `Work/fm1-base` — **MPL-2.0**, BSP и третьи части — под своими лицензиями; детали в `Work/fm1-base/LICENSING.md` и `Work/fm1-base/LICENSES/`. Сторонние/sdk-зависимости описаны в [THIRD_PARTY.md](THIRD_PARTY.md).

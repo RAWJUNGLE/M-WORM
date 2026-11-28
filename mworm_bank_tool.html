@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M-WORM — редактор банков и паттернов</title>
+<style>
+  :root{--bg:#12151a;--panel:#1b2027;--line:#303842;--fg:#d8dee6;--dim:#8792a0;--acc:#ffb454;--ok:#7ddc8a;--err:#ff7676}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:#171b21}
+  h1{margin:0;font-size:17px;color:var(--acc)}
+  header p{margin:4px 0 0;color:var(--dim)}
+  #drop{margin:16px 20px;padding:22px;border:2px dashed var(--line);border-radius:10px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
+  #drop:hover,#drop.over{border-color:var(--acc);color:var(--acc);background:#1d2229}
+  main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:0 20px 24px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .panel h2{margin:0 0 8px;font-size:13px;color:var(--acc);text-transform:uppercase;letter-spacing:.06em}
+  .bank{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .bank:last-child{border:0;margin:0;padding:0}
+  .bank .name{font-weight:600;margin-bottom:6px;word-break:break-all}
+  .bank .meta{color:var(--dim);font-size:11px;margin-bottom:8px}
+  .slots{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+  .slot{padding:6px 0;border:1px solid var(--line);border-radius:5px;background:#222831;color:var(--dim);text-align:center;cursor:pointer;font:11px monospace}
+  .slot.used{color:var(--fg);border-color:#4a5563}
+  .slot.sel{background:var(--acc);color:#15191f;border-color:var(--acc);font-weight:700}
+  .slot:hover{border-color:var(--acc)}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  button,label.btn{background:#2a323d;color:var(--fg);border:1px solid #414c59;border-radius:6px;padding:7px 11px;cursor:pointer;font:inherit}
+  button:hover,label.btn:hover{border-color:var(--acc);color:var(--acc)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--acc);color:#15191f;border-color:var(--acc);font-weight:600}
+  input[type=file]{display:none}
+  pre{white-space:pre-wrap;word-wrap:break-word;margin:0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  #msg{margin:0 20px 12px;color:var(--ok);min-height:18px}
+  #msg.err{color:var(--err)}
+  .hint{color:var(--dim);font-size:11px;margin-top:8px}
+  @media(max-width:760px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>M-WORM · банки и паттерны</h1>
+</header>
+
+<div id="drop">Перетащите сюда BANK_*.WPB (или .pat для вставки) — либо нажмите, чтобы выбрать файлы</div>
+<input id="files" type="file" multiple accept=".wpb,.pat">
+<div id="msg"></div>
+
+<main>
+  <section class="panel">
+    <h2>Банки</h2>
+    <div id="banks"><div class="hint">Файлы ещё не загружены</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Паттерн</h2>
+    <div class="bar">
+      <button id="bExtract" class="primary" disabled>Скачать .pat</button>
+      <label class="btn" id="bImportLbl">Вставить .pat в слот<input id="patFile" type="file" accept=".pat"></label>
+      <button id="bAll" disabled>Извлечь все</button>
+      <button id="bBank" disabled>Скачать банк</button>
+      <button id="bClose">Очистить</button>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* --- константы формата (worm_store.c / worm.h) --- */
+const NP=175, NPB=22, NMP=50, NMPB=7, NTRK=4, NMTRK=4, NPAT=16, BANK_SZ=36864;
+const BANK_MAGIC=[0x31,0x42,0x50,0x57];           // '1BPW' = 0x57504231 в little-endian
+const PAT_MAGIC=[0x4d,0x57,0x50,0x54];            // 'MWPT'
+const PAT_VER=1, PAT_HDR=16;
+const PLIST=[
+'ROOT','VEL','LEN','PROB','COND','FLT.T','LFO.T','PORT.T','PORTA','ALGO',
+'WAVE','PW','TUNE','OCT','DETUNE','SUB','LEVEL','WAVE2','PW2','TUNE2',
+'OCT2','DETUNE2','SUB2','LEVEL2','PITCH','PITCH','RATIO','FDBK','I.ENV','I.VEL',
+'RATIO','FDBK','I.ENV','I.VEL','HARMON','FOLD','MORPH','D/WET','DIST','PAN',
+'VOL','DRIVE','DELAY','REVERB','CHORUS','TIME','FDBK','FILT','MIX','SIZE',
+'DECAY','DAMP','MIX','RATE','DEPTH','DELAY','MIX','TRANS','CUTOFF','RESO',
+'TYPE','ENV','CUTOFF','RESO','TYPE','ENV','D/WET','D/WET','DEST','SPEED',
+'DEPTH','WAVE','MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH',
+'WAVE','MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH','WAVE',
+'MODE','SYNC','SLOPE','SMOOTH','SHIFT','DEST','SPEED','DEPTH','WAVE','MODE',
+'SYNC','SLOPE','SMOOTH','SHIFT','ATK','DEC','SUS','REL','ATK','DEC',
+'SUS','REL','ATK','DEC','SUS','REL','ATK','DEC','SUS','REL',
+'ATK','DEC','SUS','REL','DEST','DEPTH','DRIVE','PAN','VOL','DRIVE',
+'PAN','VOL','DRIVE','PAN','VOL','DRIVE','PAN','VOL','E.HITS','E.OFS',
+'E.LIMIT','E.MUTE','SCALE','ROOT','CHORD','TRANSP','CLICK','VOL','PRE','SOUND',
+'-','-','-','-','DIR','LENGTH','SPEED','SWING','PAGES','VIEW',
+'STEP','mTIME','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL','LEVEL',
+'ARPMOD','ARPSPD','ARPOCT','ARPGAT','QUANT'];
+const MLIST=[
+'CHAN','PROG','BK.MSB','BK.LSB','VOL','PAN','QUANT','CHORD','MUTE','ARPMOD',
+'ARPSPD','ARPOCT','ARPGAT','CC','BASE','DEPTH','SPEED','WAVE','SYNC','PHASE',
+'CC','BASE','DEPTH','SPEED','WAVE','SYNC','PHASE','CC','BASE','DEPTH',
+'SPEED','WAVE','SYNC','PHASE','CC','BASE','DEPTH','SPEED','WAVE','SYNC',
+'PHASE','TO MIDI','RETRIG','R.LEN','R.VEL'];
+const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const pname=i=>PLIST[i]||('P'+i);
+const mname=q=>q<41?MLIST[q]:q<46?PLIST[q-41]+'(NOTE)':q<NMP?PLIST[138+q-46]+'(EUCL)':('M'+q);
+const noteName=n=>NOTE_NAMES[n%12]+(Math.floor(n/12)-1);
+const s8=v=>v>=128?v-256:v;
+
+/* --- CRC32 (zlib) --- */
+function crc32(b){let c=0xffffffff;for(let i=0;i<b.length;i++){c^=b[i];for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0);}return (c^0xffffffff)>>>0;}
+
+/* --- чтение --- */
+class R{
+  constructor(b){this.b=b;this.i=0;}
+  need(n){if(this.i+n>this.b.length)throw new Error('запись паттерна обрезана');}
+  u8(){this.need(1);return this.b[this.i++];}
+  u16(){this.need(2);const v=this.b[this.i]|(this.b[this.i+1]<<8);this.i+=2;return v;}
+  take(n){this.need(n);const v=this.b.subarray(this.i,this.i+n);this.i+=n;return v;}
+  vi(){let z=0,sh=0,c;for(;;){c=this.u8();z|=(c&127)<<sh;sh+=7;if(!(c&128))break;if(sh>28)throw new Error('LEB128 слишком длинный');}return (z&1)?-((z>>1)+1):(z>>1);}
+}
+function same(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
+
+function parseBank(buf){
+  if(buf.length<36||!same(buf.subarray(0,4),BANK_MAGIC))throw new Error('не банк M-WORM (ожидался 1BPW)');
+  let o=4;const recs=[];
+  for(let p=0;p<NPAT;p++){
+    const n=buf[o]|(buf[o+1]<<8);o+=2;
+    if(o+n>buf.length)throw new Error('запись выходит за размер файла');
+    recs.push(buf.slice(o,o+n));o+=n;
+  }
+  return recs;
+}
+function buildBank(recs){
+  const out=new Uint8Array(BANK_SZ);out.fill(0xff);out.set(BANK_MAGIC,0);
+  let o=4;
+  recs.forEach(r=>{
+    if(o+2+r.length>BANK_SZ)throw new Error('банк переполнен');
+    out[o]=r.length&255;out[o+1]=r.length>>8;o+=2;out.set(r,o);o+=r.length;
+  });
+  return out;
+}
+function readSeq(r){
+  const n=r.u16();if(n>128)throw new Error('слишком много шагов: '+n);
+  const steps=[];
+  for(let i=0;i<n;i++){
+    const raw=r.take(13),nl=raw[8];if(nl>6)throw new Error('слишком много p-lock: '+nl);
+    const links=[];for(let k=0;k<nl;k++)links.push([r.u8(),r.u16()]);
+    let rv=(raw[1]>>1)&127;if(rv&64)rv-=128;
+    steps.push({step:raw[0]&127,on:raw[0]&1,rtv:rv,note:raw[2],vel:raw[3],len:(raw[4]&7)+1,
+      rtr:(raw[4]>>3)&15,prob:raw[5],cond:raw[6]&15,rtl:(raw[6]>>4)&7,mt:s8(raw[7]),links:links});
+  }
+  return steps;
+}
+function readPatch(r,count){
+  const bm=r.take((count+7)>>3),out={};
+  for(let i=0;i<count;i++)if(bm[i>>3]&(1<<(i&7)))out[i]=r.vi();
+  return out;
+}
+function parsePattern(rec){
+  const r=new R(rec),tracks=[];
+  for(let t=0;t<NTRK;t++){
+    const steps=readSeq(r);
+    const modeKeys=['len','dir','spd','swg','pg','vp','mute'],modes={};
+    modeKeys.forEach(k=>modes[k]=r.u8());
+    const patch=readPatch(r,NP),na=r.u8(),aut=[];
+    for(let i=0;i<Math.min(na,64);i++)aut.push([r.u8(),r.u8(),r.u16()]);
+    tracks.push({steps,modes,patch,aut});
+  }
+  const gpatch=readPatch(r,NP);
+  let mmask=0,amo=0;
+  if(r.i+2<=rec.length){mmask=r.u8();amo=r.u8();}
+  const mtrks=[];
+  for(let k=0;k<NMTRK;k++)if(mmask&(1<<k)){
+    const steps=readSeq(r),modes={};['len','dir','spd','swg','pg','vp'].forEach(key=>modes[key]=r.u8());
+    mtrks.push({k,steps,modes,patch:readPatch(r,NMP)});
+  }
+  return {tracks,gpatch,amo,mtrks,bytes:rec.length};
+}
+
+/* --- состояние и UI --- */
+const S={banks:[],sel:null};
+const $=id=>document.getElementById(id);
+function bankLetter(b){const m=/BANK_?([A-H])/i.exec(b.fileName);return m?m[1].toUpperCase():'ABCDEFGH'[Math.max(0,S.banks.indexOf(b))]||'A';}
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function msg(t,err){const e=$('msg');e.textContent=t;e.className=err?'err':'';}
+function render(){
+  const box=$('banks');
+  if(!S.banks.length){box.innerHTML='<div class="hint">Файлы ещё не загружены</div>';}
+  else{
+    box.innerHTML=S.banks.map((b,bi)=>{
+      const used=b.recs.filter(r=>r.length).length;
+      const slots=b.recs.map((r,i)=>{
+        const sel=S.sel&&S.sel.bi===bi&&S.sel.slot===i;
+        return '<div class="slot '+(r.length?'used':'')+' '+(sel?'sel':'')+'" data-bi="'+bi+'" data-slot="'+i+'">'+
+          String(i+1).padStart(2,'0')+'</div>';
+      }).join('');
+      return '<div class="bank"><div class="name">'+esc(b.name)+'</div><div class="meta">'+used+'/16 паттернов · '+esc(b.fileName)+'</div><div class="slots">'+slots+'</div></div>';
+    }).join('');
+    box.querySelectorAll('.slot').forEach(el=>el.onclick=()=>select(+el.dataset.bi,+el.dataset.slot));
+  }
+  const has=!!S.sel;
+  const filled=has&&S.banks[S.sel.bi].recs[S.sel.slot].length>0;
+  $('bExtract').disabled=!filled;
+  $('bAll').disabled=!S.banks.length;
+  $('bBank').disabled=!has;
+  $('bImportLbl').style.display=has?'':'none';
+}
+function select(bi,slot){
+  S.sel={bi,slot};render();
+  msg(S.banks[bi].recs[slot].length?'':'Пустой слот — можно вставить паттерн');
+}
+function download(name,bytes){
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));
+  const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* --- загрузка файлов --- */
+async function loadFiles(list){
+  let bad=0,added=0;
+  for(const f of list){
+    try{
+      const buf=new Uint8Array(await f.arrayBuffer());
+      const name=f.name.toUpperCase();
+      if(name.endsWith('.WPB')){
+        const recs=parseBank(buf);
+        S.banks.push({name:f.name.replace(/\.[^.]+$/,''),fileName:f.name,data:buf,recs});
+        added++;
+      }else if(name.endsWith('.PAT')){
+        if(!S.sel){msg('Сначала выберите слот, затем вставляйте .pat',true);bad++;continue;}
+        importPat(buf,S.sel.bi,S.sel.slot,f.name);
+      }else{bad++;}
+    }catch(e){msg(f.name+': '+e.message,true);bad++;}
+  }
+  render();
+  if(added)msg('Загружено банков: '+added+(bad?'; пропущено файлов: '+bad:''));
+}
+function importPat(pat,bi,slot,src){
+  if(pat.length<PAT_HDR+1||!same(pat.subarray(0,4),PAT_MAGIC))throw new Error('не паттерн M-WORM');
+  if(pat[4]!==PAT_VER)throw new Error('неизвестная версия .pat');
+  const len=pat[8]|(pat[9]<<8)|(pat[10]<<16)|(pat[11]<<24);
+  const crc=(pat[12]|(pat[13]<<8)|(pat[14]<<16)|(pat[15]<<24))>>>0;
+  const rec=pat.slice(PAT_HDR);
+  if(rec.length!==len||crc32(rec)!==crc)throw new Error('длина/CRC не совпадают — файл повреждён');
+  parsePattern(rec);
+  const b=S.banks[bi];b.recs[slot]=rec;b.data=buildBank(b.recs);
+  S.sel={bi,slot};render();
+  msg('Вставлено в '+b.fileName+' / '+String(slot+1).padStart(2,'0'));
+}
+
+/* --- события --- */
+$('drop').onclick=()=>$('files').click();
+$('files').onchange=e=>{const list=Array.from(e.target.files);e.target.value='';loadFiles(list);};
+['dragenter','dragover'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over');}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('over');}));
+$('drop').addEventListener('drop',e=>loadFiles(Array.from(e.dataTransfer.files)));
+
+$('bExtract').onclick=()=>{
+  const b=S.banks[S.sel.bi],rec=b.recs[S.sel.slot];
+  const out=new Uint8Array(PAT_HDR+rec.length);
+  out.set(PAT_MAGIC,0);out[4]=PAT_VER;out[5]='ABCDEFGH'.indexOf(bankLetter(b));out[6]=S.sel.slot;
+  out[8]=rec.length&255;out[9]=(rec.length>>8)&255;out[10]=(rec.length>>16)&255;out[11]=(rec.length>>24)&255;
+  const c=crc32(rec);out[12]=c&255;out[13]=(c>>8)&255;out[14]=(c>>16)&255;out[15]=(c>>24)&255;
+  out.set(rec,PAT_HDR);
+  download('PAT_'+bankLetter(b)+String(S.sel.slot+1).padStart(2,'0')+'.pat',out);
+  msg('Паттерн извлечён');
+};
+$('patFile').onchange=e=>{
+  const f=e.target.files[0];e.target.value='';
+  if(!f)return;
+  if(!S.sel){msg('Сначала выберите слот для вставки',true);return;}
+  const bi=S.sel.bi,slot=S.sel.slot;
+  f.arrayBuffer().then(buf=>{try{importPat(new Uint8Array(buf),bi,slot,f.name);render();}catch(err){msg(err.message,true);}});
+};
+$('bAll').onclick=()=>{
+  let n=0;
+  S.banks.forEach(b=>b.recs.forEach((rec,i)=>{
+    if(!rec.length)return;parsePattern(rec);
+    const out=new Uint8Array(PAT_HDR+rec.length);out.set(PAT_MAGIC,0);out[4]=PAT_VER;out[5]='ABCDEFGH'.indexOf(bankLetter(b));out[6]=i;
+    out[8]=rec.length&255;out[9]=(rec.length>>8)&255;out[10]=(rec.length>>16)&255;out[11]=(rec.length>>24)&255;
+    const c=crc32(rec);out[12]=c&255;out[13]=(c>>8)&255;out[14]=(c>>16)&255;out[15]=(c>>24)&255;out.set(rec,PAT_HDR);
+    download('PAT_'+bankLetter(b)+String(i+1).padStart(2,'0')+'.pat',out);n++;
+  }));
+  msg('Извлечено паттернов: '+n);
+};
+$('bBank').onclick=()=>{
+  const b=S.banks[S.sel.bi];download(b.fileName,b.data);msg('Банк готов к сохранению: '+b.fileName);
+};
+$('bClose').onclick=()=>{S.banks=[];S.sel=null;render();msg('');};
+render();
+</script>
+</body>
+</html>

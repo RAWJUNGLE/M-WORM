@@ -1,0 +1,2 @@
+# Host build / font generator only. Device build also needs the JieLi toolchain and SDK (see README).
+Pillow>=10
