@@ -14,18 +14,21 @@
 | Connectivity | USB audio, USB MIDI, USB disk for bank files |
 
 
-# M-WORM FM-1 — как устроен звук
+# M-WORM FM-1 — How the sound works
 
-> **Одной фразой:** паттерн говорит, *что* играть → секвенсор решает, *когда* → голос берёт ноту → движок делает звук → AMP/ADSR задаёт громкость → фильтр красит тембр → TRANSIENT добавляет атаку → сухой сигнал и SENDS уходят в микшер/эффекты → мастер → лимитер → выход.
+> **In one sentence:** the pattern says *what* to play → the sequencer decides *when* → the voice takes the note → the engine makes the sound → AMP/ADSR sets the level → the filter shapes the tone → TRANSIENT adds the attack → the dry signal and SENDS go to the mixer/FX → master → limiter → output.
 
 ---
 
-## Общая схема
+## Signal flow
+
+> GitHub draws its own pan/zoom controls over Mermaid; the `diagramPadding` setting below keeps them away from the content.
 
 ```mermaid
+%%{init: {"flowchart": {"diagramPadding": 150}}}%%
 flowchart LR
-    SEQ["**SEQ**<br/>паттерн · BPM · такт<br/>EUC · PROB · COND · RETRIG"]
-    V["**VOICE ×6**<br/>один голос на дорожку"]
+    SEQ["**SEQ**<br/>pattern · BPM · bar<br/>EUC · PROB · COND · RETRIG"]
+    V["**VOICE ×6**<br/>one voice per track"]
     E["**ENGINE**<br/>VA · WT · FM"]
     S["**SHAPE**<br/>AMP/ADSR ×2<br/>FLT/ADSR ×2"]
     O["**OUT AMP**<br/>DIST · VOL/PAN<br/>TRANSIENT"]
@@ -34,7 +37,7 @@ flowchart LR
     FX["**FX → RETURNS**"]
     MIX(("MIX"))
     M["**MASTER**<br/>DC · LIMITER"]
-    OUT(["**OUT**<br/>спикер · USB · диск"])
+    OUT(["**OUT**<br/>speaker · USB · disk"])
 
     SEQ --> V --> E --> S --> O
     O --> D --> MIX
@@ -51,112 +54,112 @@ flowchart LR
     class M,OUT out;
 ```
 
-Если Mermaid не рисуется, та же цепочка текстом:
+If Mermaid does not render, here is the same chain as text:
 
 ```text
-ПАТТЕРН → СЕКВЕНСОР → ГОЛОС → ДВИЖОК
-        → AMP/ADSR ×2 → ФИЛЬТР ×2 + ADSR ×2
+PATTERN → SEQUENCER → VOICE → ENGINE
+        → AMP/ADSR ×2 → FILTER ×2 + ADSR ×2
         → AMP DIST → VOL/PAN → TRANSIENT
-        → { СУХОЙ → L/R   ‖   SENDS → FX → RETURNS }
-        → МИКС → МАСТЕР → DC BLOCK → ЛИМИТЕР → ВЫХОД
+        → { DRY → L/R   ‖   SENDS → FX → RETURNS }
+        → MIX → MASTER → DC BLOCK → LIMITER → OUTPUT
 ```
 
 ---
 
-## 1. Секвенсор
+## 1. Sequencer
 
-| Блок | Что делает |
+| Block | What it does |
 |---|---|
-| **PATTERN** | Хранит шаги: ноту, громкость, длительность, p-lock. BPM лежит прямо в паттерне (`B7 + u16 BPM*10`). |
-| **CLOCK / BAR** | Считает BPM, такт и собственные часы каждой дорожки: длина, направление, скорость, свинг. |
-| **TRIGGER** | Решает, играть шаг или нет: EUCLID, `PROB`, условия `1ST / FILL / 4BAR / NEV`, повторы `RETRIG`. |
-| **Смена паттерна** | Ставит запрос и применяет его строго на границе такта, чтобы не порвать ритм. |
-| **P-lock / AUT** | Сначала берётся пресет шага, потом его p-lock; поверх — автоматизация, 4 LFO и свободный ENV4. |
+| **PATTERN** | Stores steps: note, velocity, length, p-lock. BPM lives in the pattern (`B7 + u16 BPM*10`). |
+| **CLOCK / BAR** | Tracks BPM, the bar, and each track's own clock: length, direction, speed, swing. |
+| **TRIGGER** | Decides whether to play a step: EUCLID, `PROB`, conditions `1ST / FILL / 4BAR / NEV`, `RETRIG`. |
+| **Pattern change** | Queued and applied exactly at the bar boundary so the rhythm is not cut. |
+| **P-lock / AUT** | Step preset first, then its p-locks; on top — automation, 4 LFOs and free ENV4. |
 
 ---
 
-## 2. Голос и движок
+## 2. Voice and engine
 
-**6 аудиодорожек = 6 моноголосов.** У каждой дорожки — свой один голос, свой патч и свои часы. Полифонии как пула нет: новый ретриггер перезапускает тот же голос.
+**6 audio tracks = 6 monophonic voices.** Each track has its own voice, patch and clock. There is no voice pool: a retrigger restarts the same voice.
 
-| Движок | Диапазон | Источник звука |
+| Engine | Range | Sound source |
 |---|---|---|
 | **VA** | `WAVE 0..5` | `SIN · TRI · SAW · SQR · PLS · NOI` |
-| **WAVETABLE** | `WAVE 6..10` | 5 основных таблиц по 64 кадра, зашиты в прошивку |
-|  | `WAVE 11..17` | 7 пользовательских слотов из `WTABLE.WPT` |
-|  | `WAVE 18..57` | 40 таблиц библиотеки, зашиты в прошивку |
-| **FM** | 8 алгоритмов | Операторы `C / A / B1 / B2`, кроссфейд `X / Y`, равномощный `MIX` |
+| **WAVETABLE** | `WAVE 6..10` | 5 main tables, 64 frames each, built into firmware |
+|  | `WAVE 11..17` | 7 user slots from `WTABLE.WPT` |
+|  | `WAVE 18..57` | 40 library tables, built into firmware |
+| **FM** | 8 algorithms | Operators `C / A / B1 / B2`, `X / Y` crossfade, equal-power `MIX` |
 
-> Не путать: глобальный `ALGO` выбирает **VA / FM / WT**, а `0..7` у FM — это уже номер fm-алгоритма внутри движка.
+> Do not confuse: global `ALGO` selects **VA / FM / WT**, while `0..7` is the FM algorithm number inside the engine.
 
 ---
 
-## 3. AMP, ADSR и фильтры
+## 3. AMP, ADSR and filters
 
-| Огибающая | Назначение |
+| Envelope | Purpose |
 |---|---|
-| `E0` | AMP канала `OSC1 + SUB` |
-| `E3` | AMP канала `OSC2` |
-| `E1` | Фильтр `F1` |
-| `E2` | Фильтр `F2` |
-| `E4` | Свободная ADSR для маршрутизации через `DEST` — отдельным блоком в цепи не стоит |
+| `E0` | AMP of the `OSC1 + SUB` channel |
+| `E3` | AMP of the `OSC2` channel |
+| `E1` | Filter `F1` |
+| `E2` | Filter `F2` |
+| `E4` | Free ADSR for `DEST` routing — not a separate block in the chain |
 
-Порядок внутри голоса:
+Order inside a voice:
 
 ```text
-генератор → drive → AMP/ADSR → свой фильтр
+generator → drive → AMP/ADSR → its own filter
 ```
 
-- **VA / WAVETABLE:** `F1` работает на `X / OSC1`, `F2` — на `Y / OSC2`, два канала параллельны.
-- **FM:** канал `OSC2` выключен, `F2` идёт **после `F1` последовательно** по `X`.
-- У FM внутри движка дополнительно есть свои огибающие у операторов `A` и `B`.
+- **VA / WAVETABLE:** `F1` works on `X / OSC1`, `F2` works on `Y / OSC2`; the two channels are parallel.
+- **FM:** the `OSC2` channel is off; `F2` runs **after `F1`, in series**, on `X`.
+- FM also has its own envelopes for operators `A` and `B` inside the engine.
 
-Типы фильтра: `OFF / LP / HP / BP` (TPT SVF).
+Filter types: `OFF / LP / HP / BP` (TPT SVF).
 
 ---
 
-## 4. TRANSIENT, SENDS и FX
+## 4. TRANSIENT, SENDS and FX
 
-После фильтра сигнал проходит:
+After the filter, the signal goes through:
 
 ```text
 AMP DIST → AMP VOL / PAN → AMP TRANSIENT
 ```
 
-- **AMP TRANSIENT** — акцент атаки: нота «бьёт» резче в начале и быстро спадает. Настройка каждой дорожки, может быть p-lock и модулироваться.
-- **SENDS** — уровни отправки копии звука в общие эффекты: `SEND DELAY`, `SEND REVERB`, `SEND CHORUS`.
-- **Сухой сигнал и SENDS идут параллельно**, не друг за другом.
-- **RETURNS** приходят из блока FX и соединяются с сухим сигналом уже перед мастером.
+- **AMP TRANSIENT** — attack accent: the note hits harder at the start and quickly decays. It is a per-track setting and can be p-locked and modulated.
+- **SENDS** — send levels of a copy of the sound to the shared effects: `SEND DELAY`, `SEND REVERB`, `SEND CHORUS`.
+- **The dry signal and SENDS run in parallel**, not one after the other.
+- **RETURNS** come back from the FX block and join the dry signal just before master.
 
-Итог:
+Result:
 
 ```text
-                 ┌─ СУХОЙ → L/R ──────────┐
-TRANSIENT ───────┤                        ├→ МИКС → МАСТЕР → DC → ЛИМИТЕР → ВЫХОД
+                 ┌─ DRY → L/R ────────────┐
+TRANSIENT ───────┤                        ├→ MIX → MASTER → DC → LIMITER → OUTPUT
                  └─ SENDS → FX → RETURNS ─┘
 ```
 
-`DC BLOCK` перед лимитером убирает постоянную составляющую.
+`DC BLOCK` before the limiter removes the DC offset.
 
 ---
 
-## 5. Что происходит «под капотом»
+## 5. Under the hood
 
-- Рендер режется на куски по 64 сэмпла; границы совпадают с событиями секвенсора.
-- **CPU1** считает часть активных голосов и реверб.
-- **CPU0** считает остальные голоса, дилей, хорус, шины, мастер и лимитер.
-- Если CPU1 не отвечает — есть откат вычислений на CPU0 и полный переход на одно ядро.
+- Rendering is split into 64-sample chunks; the boundaries line up with sequencer events.
+- **CPU1** computes part of the active voices and the reverb.
+- **CPU0** computes the remaining voices, delay, chorus, buses, master and limiter.
+- If CPU1 does not respond, calculations roll back to CPU0 and it falls back to a single core.
 
 ---
 
-## 6. Куда уходит звук
+## 6. Where the sound goes
 
-| Выход | Что это |
+| Output | What it is |
 |---|---|
-| **Динамик FM-1** | 24-битный поток через ALNK0 / I2S во внешний кодек |
-| **USB-аудио** | микшер с компьютерной записью/воспроизведением |
-| **Виртуальный диск MSC** | `WTABLE.WPT`, банки `.WPB`, паттерны `.pat`, проекты |
+| **FM-1 speaker** | 24-bit stream through ALNK0 / I2S to the external codec |
+| **USB audio** | mixer with computer recording/playback |
+| **MSC virtual disk** | `WTABLE.WPT`, `.WPB` banks, `.pat` patterns, projects |
 
 ---
 
-> Старые комментарии в коде и `docs/MANUAL.md` местами говорят про 4 дорожки/голоса и «неиспользуемый CPU1». Это устарело: актуальная схема — 6 голосов и CPU1 используется.
+> Old code comments and `docs/MANUAL.md` still mention 4 tracks/voices and an "unused CPU1". That is outdated: the current scheme has 6 voices and CPU1 is used.
