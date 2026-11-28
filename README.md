@@ -23,44 +23,32 @@
 ## Общая схема
 
 ```mermaid
-flowchart TD
-    subgraph S1["01 · СЕКВЕНСОР"]
-        P["**PATTERN**<br/>шаги, ноты, p-lock, BPM"] --> C["**CLOCK / BAR**<br/>BPM · скорость дорожки · такт"]
-        C --> T["**TRIGGER**<br/>EUCLID · PROB · 1ST/FILL/4BAR/NEV · RETRIG"]
-    end
+flowchart LR
+    SEQ["**SEQ**<br/>паттерн · BPM · такт<br/>EUC · PROB · COND · RETRIG"]
+    V["**VOICE ×6**<br/>один голос на дорожку"]
+    E["**ENGINE**<br/>VA · WT · FM"]
+    S["**SHAPE**<br/>AMP/ADSR ×2<br/>FLT/ADSR ×2"]
+    O["**OUT AMP**<br/>DIST · VOL/PAN<br/>TRANSIENT"]
+    D["**DRY**<br/>L / R"]
+    SND["**SENDS**<br/>DLY · REV · CHO"]
+    FX["**FX → RETURNS**"]
+    MIX(("MIX"))
+    M["**MASTER**<br/>DC · LIMITER"]
+    OUT(["**OUT**<br/>спикер · USB · диск"])
 
-    subgraph S2["02 · ГОЛОС × 6"]
-        V["**VOICE V[trk]**<br/>один голос на дорожку"] --> E["**ENGINE**<br/>VA · WAVETABLE · FM"]
-        E --> A["**AMP + ADSR ×2**<br/>E0 = OSC1+SUB · E3 = OSC2"]
-        A --> F["**FILTER ×2 + ADSR ×2**<br/>F1/E1 · F2/E2"]
-        F --> D["**AMP DIST → VOL / PAN**"]
-        D --> TR["**TRANSIENT**<br/>атака каждой ноты"]
-    end
-
-    T --> V
-
-    TR --> DRY["**СУХОЙ**<br/>L / R шина"]
-    TR --> SND["**SENDS**<br/>DELAY · REVERB · CHORUS"]
-    SND --> FX["**FX + RETURNS**<br/>настройки эффектов"]
-    DRY --> MIX["**МИКС**"]
-    FX --> MIX
-    MIX --> MASTER["**МАСТЕР**"]
-    MASTER --> DC["**DC BLOCK**"]
-    DC --> LIM["**ЛИМИТЕР**"]
-    LIM --> OUT(["**ВЫХОД**"])
-
-    OUT --> SPK["Динамик<br/>I2S / ALNK0"]
-    OUT --> USB["USB-аудио<br/>в компьютер"]
-    OUT --> DISK["Виртуальный диск<br/>WPT / банки / проекты"]
+    SEQ --> V --> E --> S --> O
+    O --> D --> MIX
+    O --> SND --> FX --> MIX
+    MIX --> M --> OUT
 
     classDef seq fill:#141414,stroke:#8792a0,color:#ececec;
     classDef voice fill:#0d0e02,stroke:#e5f21c,color:#ececec;
-    classDef fx fill:#141414,stroke:#3a3a3a,color:#ececec;
+    classDef bus fill:#141414,stroke:#3a3a3a,color:#ececec;
     classDef out fill:#e5f21c,stroke:#e5f21c,color:#000000;
-    class P,C,T seq;
-    class V,E,A,F,D,TR voice;
-    class DRY,SND,FX,MIX fx;
-    class MASTER,DC,LIM,OUT,SPK,USB,DISK out;
+    class SEQ seq;
+    class V,E,S,O voice;
+    class D,SND,FX,MIX bus;
+    class M,OUT out;
 ```
 
 Если Mermaid не рисуется, та же цепочка текстом:
