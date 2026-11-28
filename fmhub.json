@@ -1,7 +1,7 @@
 {
-  "what": "M-WORM is an open-source groovebox inspired by the philosophy of Elektron machines. 6 tracks, 128 steps per pattern, 16 pattern, 8 banks, 1 project. 3 engines - Wavetable, Virtual Analog, FM. x 2 Filters + 2 ADSR, x2 AMP + x 2 ADSR (and FREE ADSR + mapping), x 4 LFO - 7 waveforms + MI Tides, Live mode + Live FX. ",
+  "what": "M-WORM is an open-source groovebox inspired by the philosophy of Elektron machines. 6 tracks, 128 steps per pattern, 16 pattern, 8 banks, 1 project. 3 engines - Wavetable, Virtual Analog, FM. x 2 Filters + 2 ADSR, x2 AMP + x 2 ADSR (and FREE ADSR + mapping), x 4 LFO - 7 waveforms + MI Tides",
   "author": "RAWJUNGLE",
-  "kinds": ["synth", "groove"],
+  "kinds": ["groove"],
   "image": "docs/card.png",
   "color": "#E5F21C",
   "sounds": "own: wavetables generated from my own source WAVs",
